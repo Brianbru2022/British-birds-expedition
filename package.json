@@ -1,0 +1,25 @@
+{
+  "name": "british-birds-expedition",
+  "private": true,
+  "version": "1.0.0-stabilised",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "npm run validate:data && tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "validate:data": "tsx scripts/validateData.ts"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^5.0.4",
+    "vite": "^6.4.3",
+    "typescript": "~5.8.2",
+    "tsx": "^4.21.0",
+    "react": "^19.0.1",
+    "react-dom": "^19.0.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/node": "^22.14.0"
+  }
+}
