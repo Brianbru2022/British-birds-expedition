@@ -1,7 +1,7 @@
 {
   "name": "british-birds-expedition",
   "private": true,
-  "version": "1.0.0-stabilised",
+  "version": "1.1.0-phase-2",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
