@@ -23,7 +23,7 @@ export interface BirdCard {
   diet: Diet;
   conservation: Conservation;
   migratory: Migratory;
-  rarity: 1 | 2 | 3 | 4 | 5;
+  rarity: number;
   wingspan: number;
   length?: number;
   weight?: number;
