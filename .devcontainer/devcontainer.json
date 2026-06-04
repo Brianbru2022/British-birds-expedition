@@ -1,0 +1,30 @@
+{
+  "name": "British Birds Expedition",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm",
+  "features": {},
+  "postCreateCommand": "npm install",
+  "postAttachCommand": "echo 'Run npm run dev to start the app. Open the forwarded port from the Ports tab.'",
+  "forwardPorts": [5173, 3000],
+  "portsAttributes": {
+    "5173": {
+      "label": "Vite app",
+      "onAutoForward": "openPreview"
+    },
+    "3000": {
+      "label": "Local server / API",
+      "onAutoForward": "notify"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "editor.formatOnSave": true
+      }
+    }
+  }
+}
