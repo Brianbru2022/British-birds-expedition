@@ -40,7 +40,9 @@ export default function App() {
   const filteredGuide = useMemo(() => {
     const query = guideQuery.trim().toLowerCase();
     return BIRD_DATASET.filter((bird) =>
-      query.length === 0 || [bird.name, bird.group, bird.habitat, bird.diet, bird.conservation].some((value) => value.toLowerCase().includes(query)),
+      query.length === 0 || [bird.name, bird.scientificName, bird.group, bird.habitat, bird.diet, bird.conservation]
+        .filter((value): value is string => Boolean(value))
+        .some((value) => value.toLowerCase().includes(query)),
     ).slice(0, 80);
   }, [guideQuery]);
 
@@ -81,7 +83,7 @@ export default function App() {
   function handleUseBinoculars() {
     if (!question) return;
     setGame((current) => {
-      const result = useBinoculars(current, question);
+      const result = useBinoculars(current, question, visibleChoices);
       setVisibleChoices(result.choices);
       return result.state;
     });
@@ -94,7 +96,7 @@ export default function App() {
           <p className="eyebrow">British Field Ornithology Guild</p>
           <h1>British Birds Expedition</h1>
           <p className="lead">
-            A stabilised, GitHub-ready pass-and-play quiz build with immutable scoring, Fisher-Yates randomisation, saved games, and a fixed rarity round.
+            A stabilised, GitHub-ready pass-and-play quiz build with immutable scoring, Fisher-Yates randomisation, saved games, gear-ready players, and a fixed rarity round.
           </p>
           <div className="hero-actions">
             <button onClick={startSetup}>Start new expedition</button>
@@ -106,7 +108,7 @@ export default function App() {
           <div className="stat-grid">
             <span><strong>{BIRD_DATASET.length}</strong> species cards</span>
             <span><strong>{ROUNDS.length}</strong> rounds</span>
-            <span><strong>Local</strong> save/resume</span>
+            <span><strong>Gear</strong> model active</span>
           </div>
         </section>
         {guideOpen && <FieldGuide query={guideQuery} setQuery={setGuideQuery} birds={filteredGuide} onClose={() => setGuideOpen(false)} />}
@@ -120,6 +122,7 @@ export default function App() {
         <section className="panel narrow">
           <p className="eyebrow">Expedition roster</p>
           <h1>Choose your players</h1>
+          <p className="muted">Each player now starts with expedition gear and action-card data in state.</p>
           {names.map((name, index) => (
             <div className="name-row" key={index}>
               <input value={name} onChange={(event) => updateName(index, event.target.value)} aria-label={`Player ${index + 1} name`} />
@@ -147,7 +150,7 @@ export default function App() {
               <li key={player.id}>
                 <span>{player.name}</span>
                 <strong>{player.score} pts</strong>
-                <small>{player.stats.correctAnswers}/{player.stats.totalAnswers} correct</small>
+                <small>{player.stats.correctAnswers}/{player.stats.totalAnswers} correct · best streak {player.stats.bestStreak}</small>
               </li>
             ))}
           </ol>
@@ -168,6 +171,7 @@ export default function App() {
             <li key={player.id} className={player.id === activePlayer?.id ? "active" : ""}>
               <span>{player.name}</span>
               <strong>{player.score}</strong>
+              <small>streak {player.streak} · {player.stats.correctAnswers}/{player.stats.totalAnswers}</small>
             </li>
           ))}
         </ol>
@@ -178,16 +182,40 @@ export default function App() {
       <section className="panel question-card">
         <p className="eyebrow">Question {game.questionNumber} · {activePlayer?.name}'s turn</p>
         <h1>{question?.prompt}</h1>
+        <div className="bird-meta">
+          {question && <span>{question.bird.scientificName ?? question.bird.group} · rarity {question.bird.rarity}/5</span>}
+          {game.doublePointsPlayerId === activePlayer?.id && <strong>Double points armed</strong>}
+          {game.shieldedPlayerId === activePlayer?.id && <strong>Shield armed</strong>}
+        </div>
         <div className="choice-grid">
           {visibleChoices.map((choice) => (
             <button key={choice} onClick={() => answer(choice)}>{choice}</button>
           ))}
         </div>
-        <div className="tool-row">
-          <button className="secondary" onClick={handleUseBinoculars} disabled={!activePlayer || activePlayer.binoculars <= 0 || visibleChoices.length <= 2}>
-            Use binoculars ({activePlayer?.binoculars ?? 0})
-          </button>
-          <span>{round.points} points for a correct answer</span>
+        <div className="tool-panel">
+          <h3>Expedition gear</h3>
+          <div className="tool-row">
+            <button className="secondary" onClick={handleUseBinoculars} disabled={!activePlayer || activePlayer.gear.binoculars <= 0 || visibleChoices.length <= 2}>
+              Binoculars ({activePlayer?.gear.binoculars ?? 0})
+            </button>
+            <span>Sonic {activePlayer?.gear.sonic ?? 0}</span>
+            <span>Thermal {activePlayer?.gear.thermal ?? 0}</span>
+            <span>Lures {activePlayer?.gear.lures ?? 0}</span>
+            <span>Shields {activePlayer?.gear.shields ?? 0}</span>
+          </div>
+          <h3>Action cards</h3>
+          <div className="card-row">
+            {activePlayer?.cardsInHand.map((card, index) => (
+              <article className="action-card" key={`${card.kind}-${index}`}>
+                <span>{card.icon}</span>
+                <strong>{card.name}</strong>
+                <small>{card.description}</small>
+              </article>
+            ))}
+          </div>
+        </div>
+        <div className="tool-row footer-row">
+          <span>{round.points} point{round.points === 1 ? "" : "s"} for a correct answer</span>
         </div>
         {game.lastResult && <p className="result-note">{game.lastResult}</p>}
       </section>
@@ -217,10 +245,12 @@ function FieldGuide({ query, setQuery, birds, onClose }: FieldGuideProps) {
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search species, group, habitat, diet..." />
         <div className="guide-grid">
           {birds.map((bird) => (
-            <article className="bird-tile" key={bird.id}>
+            <article className="bird-tile" key={bird.id} style={{ borderColor: bird.color ?? "rgba(255,255,255,0.2)" }}>
               <strong>{bird.name}</strong>
+              {bird.scientificName && <em>{bird.scientificName}</em>}
               <span>{bird.group} · {bird.habitat}</span>
               <small>{bird.conservation} list · rarity {bird.rarity}/5 · {bird.wingspan}cm wingspan</small>
+              <p>{bird.clue}</p>
             </article>
           ))}
         </div>
