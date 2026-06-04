@@ -1,18 +1,19 @@
 # British Birds Expedition
 
-A stabilised, GitHub-ready pass-and-play British birds quiz app built with React, TypeScript, and Vite.
+A stabilised pass-and-play British birds quiz app built with React, TypeScript, and Vite.
 
-This repository contains a lean corrected build intended for GitHub hosting. It keeps the core expedition game loop while applying the main fixes from the code review: immutable scoring updates, Fisher-Yates randomisation, local save/resume, corrected Rarity Sweepstake rules, data validation, and a GitHub Pages deployment workflow.
+## Phase 2 status
 
-## Features
+This phase keeps the clean GitHub Pages foundation and starts migrating more of the original prototype back in safely:
 
-- 388 deduplicated bird species cards generated from the original app data.
-- 20 quiz rounds, including the corrected Round 19 Rarity Sweepstake.
-- 2 to 6 local pass-and-play players.
-- Immutable player score/stat updates.
-- LocalStorage save/resume for interrupted games.
-- Lightweight field guide with search.
-- No API keys or bundled AI routes required for static hosting.
+- 388 species cards from the app's curated species list.
+- 20 quiz rounds with richer styles: identification, habitat, group, diet, conservation, migration, wingspan, clutch size, rarity, and finale.
+- Gear-shaped player state for binoculars, sonic sweep, thermal scope, golden lure, and guard shield.
+- Working binoculars flow in the UI, using the new gear model rather than the old flat `binoculars` field.
+- Action-card data and game-engine helpers for family reveal, double points, streak protection, remove wrong answers, redraw question, and gain binoculars.
+- LocalStorage save/resume using a new v2 save key so older saved games do not conflict with the new player shape.
+- Immutable player score, gear, card, streak, and stat updates.
+- GitHub Pages deployment workflow.
 
 ## Development
 
@@ -22,19 +23,20 @@ npm run dev
 npm run build
 ```
 
-`npm run build` validates the data, type-checks the code, and builds the Vite app.
+`npm run build` validates the species data, validates the 20-round definition file, type-checks the code, and builds the Vite app.
 
 ## Hosting on GitHub Pages
 
-The included workflow builds and deploys the app from `main`. In the repository settings, set **Pages → Build and deployment → Source** to **GitHub Actions**.
+This repository is designed to deploy through GitHub Actions. In the repository settings, set **Pages → Build and deployment → Source** to **GitHub Actions**.
 
-GitHub Pages hosts the static app. The original Express/Gemini image and audio endpoints from the prototype are intentionally not included in this lean hosted build because GitHub Pages cannot run a Node/Express server.
+GitHub Pages hosts the static app. The old Express/Gemini image and audio routes from the prototype are not included in this static phase because GitHub Pages cannot run a Node/Express server.
 
 ## Next migration steps
 
-The full prototype can still be migrated in phases:
-
-1. Move the remaining round-specific UI from the large prototype into smaller modules.
-2. Add proper images or SVG cards through committed assets or durable storage.
-3. Reintroduce server-backed AI features on Render, Railway, Fly.io, or Cloud Run.
-4. Add unit tests for round logic, gear, action cards, and scoring.
+1. Wire every action card to the UI buttons, not just the game-engine helpers.
+2. Add a dedicated shop/hub screen between rounds.
+3. Move the richer original bird-data fields into the GitHub build.
+4. Move more round-specific UI into standalone components.
+5. Add committed SVG or generated image assets for bird cards.
+6. Reintroduce AI image/audio features on a Node-capable host such as Render, Railway, Fly.io, or Cloud Run.
+7. Add unit tests for scoring, round setup, gear, and action cards.
