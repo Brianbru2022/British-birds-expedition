@@ -1,6 +1,6 @@
 import type { GameState } from "../types";
 
-const SAVE_KEY = "british-birds-expedition:v1";
+const SAVE_KEY = "british-birds-expedition:v2";
 
 export function loadGame(): GameState | null {
   try {
@@ -15,7 +15,7 @@ export function saveGame(state: GameState): void {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(state));
   } catch {
-    // Storage can be unavailable in private mode. The game should keep running.
+    // Storage can be unavailable in private browsing. The game should keep running.
   }
 }
 
