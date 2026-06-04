@@ -1,9 +1,24 @@
 import { useEffect, useMemo, useState } from "react";
-import { applyAnswer, BIRD_DATASET, createFreshGame, createPlayers, getRound, makeQuestion, ROUNDS, useBinoculars } from "./game";
-import type { GameState, Question } from "./types";
+import {
+  activateDoublePoints,
+  activateShield,
+  applyAnswer,
+  BIRD_DATASET,
+  createFreshGame,
+  createPlayers,
+  gainBinoculars,
+  getRound,
+  makeQuestion,
+  removeActionCardAt,
+  removeWrongChoices,
+  ROUNDS,
+  spendGear,
+  useBinoculars,
+} from "./game";
+import type { ActionCard, GameState, PlayerGear, Question } from "./types";
 import { clearGame, loadGame, saveGame } from "./utils/storage";
 
-function newQuestion(state: GameState): Question | null {
+function buildQuestion(state: GameState): Question | null {
   return state.phase === "playing" && state.players.length > 0 ? makeQuestion(state) : null;
 }
 
@@ -11,7 +26,7 @@ export default function App() {
   const [savedGame, setSavedGame] = useState<GameState | null>(() => loadGame());
   const [game, setGame] = useState<GameState>(() => createFreshGame());
   const [names, setNames] = useState<string[]>(["Player 1", "Player 2"]);
-  const [question, setQuestion] = useState<Question | null>(() => newQuestion(game));
+  const [question, setQuestion] = useState<Question | null>(() => buildQuestion(game));
   const [visibleChoices, setVisibleChoices] = useState<string[]>([]);
   const [guideQuery, setGuideQuery] = useState("");
   const [guideOpen, setGuideOpen] = useState(false);
@@ -32,18 +47,19 @@ export default function App() {
   }, [game]);
 
   useEffect(() => {
-    const nextQuestion = newQuestion(game);
+    const nextQuestion = buildQuestion(game);
     setQuestion(nextQuestion);
     setVisibleChoices(nextQuestion?.choices ?? []);
   }, [game.phase, game.currentRound, game.questionNumber, game.activePlayerIndex]);
 
   const filteredGuide = useMemo(() => {
     const query = guideQuery.trim().toLowerCase();
-    return BIRD_DATASET.filter((bird) =>
-      query.length === 0 || [bird.name, bird.scientificName, bird.group, bird.habitat, bird.diet, bird.conservation]
+    return BIRD_DATASET.filter((bird) => {
+      if (!query) return true;
+      return [bird.name, bird.scientificName, bird.group, bird.habitat, bird.diet, bird.conservation, bird.migratory]
         .filter((value): value is string => Boolean(value))
-        .some((value) => value.toLowerCase().includes(query)),
-    ).slice(0, 80);
+        .some((value) => value.toLowerCase().includes(query));
+    }).slice(0, 100);
   }, [guideQuery]);
 
   function startSetup() {
@@ -80,13 +96,94 @@ export default function App() {
     setNames((current) => current.filter((_, nameIndex) => nameIndex !== index));
   }
 
-  function handleUseBinoculars() {
+  function spendAndRedraw(current: GameState, note: string, gear: keyof PlayerGear): GameState {
+    const updated = spendGear(current, gear, note);
+    if (updated === current) return current;
+    const replacement = makeQuestion(updated);
+    setQuestion(replacement);
+    setVisibleChoices(replacement.choices);
+    return updated;
+  }
+
+  function handleUseGear(gear: keyof PlayerGear) {
+    if (!question || !activePlayer) return;
+
+    if (gear === "binoculars") {
+      setGame((current) => {
+        const result = useBinoculars(current, question, visibleChoices);
+        setVisibleChoices(result.choices);
+        return result.state;
+      });
+      return;
+    }
+
+    if (gear === "sonic") {
+      setGame((current) => spendGear(current, "sonic", `Sonic sweep: ${question.bird.name} is ${question.bird.group}, diet ${question.bird.diet.toLowerCase()}.`));
+      return;
+    }
+
+    if (gear === "thermal") {
+      setGame((current) => spendGear(current, "thermal", `Thermal scope: ${question.bird.name} favours ${question.bird.habitat.toLowerCase()} and is marked ${question.bird.migratory}.`));
+      return;
+    }
+
+    if (gear === "lures") {
+      setGame((current) => spendAndRedraw(current, `${activePlayer.name} used a Golden Lure to redraw the question.`, "lures"));
+      return;
+    }
+
+    if (gear === "shields") {
+      setGame((current) => {
+        const player = current.players[current.activePlayerIndex];
+        if (!player || player.gear.shields <= 0) return current;
+        const spent = spendGear(current, "shields", `${player.name} activated a Guard Shield for this turn.`);
+        return { ...spent, shieldedPlayerId: player.id };
+      });
+    }
+  }
+
+  function playCard(card: ActionCard, index: number) {
     if (!question) return;
-    setGame((current) => {
-      const result = useBinoculars(current, question, visibleChoices);
-      setVisibleChoices(result.choices);
-      return result.state;
-    });
+
+    if (card.kind === "double_points") {
+      setGame((current) => activateDoublePoints(current, index));
+      return;
+    }
+
+    if (card.kind === "protect_streak") {
+      setGame((current) => activateShield(current, index));
+      return;
+    }
+
+    if (card.kind === "gain_binoculars") {
+      setGame((current) => gainBinoculars(current, index));
+      return;
+    }
+
+    if (card.kind === "remove_wrong") {
+      setGame((current) => removeActionCardAt(current, index, `${activePlayer?.name ?? "Player"} used Sharp Eyes to remove two wrong options.`));
+      setVisibleChoices((current) => removeWrongChoices(question, current, 2));
+      return;
+    }
+
+    if (card.kind === "swap_options") {
+      setGame((current) => {
+        const updated = removeActionCardAt(current, index, `${activePlayer?.name ?? "Player"} followed a Fresh Trail to a new question.`);
+        const replacement = makeQuestion(updated);
+        setQuestion(replacement);
+        setVisibleChoices(replacement.choices);
+        return updated;
+      });
+      return;
+    }
+
+    if (card.kind === "reveal_family") {
+      setGame((current) => removeActionCardAt(
+        current,
+        index,
+        `Field note: ${question.bird.name} is ${question.bird.group}; habitat ${question.bird.habitat}; diet ${question.bird.diet.toLowerCase()}.`,
+      ));
+    }
   }
 
   if (game.phase === "intro") {
@@ -96,7 +193,7 @@ export default function App() {
           <p className="eyebrow">British Field Ornithology Guild</p>
           <h1>British Birds Expedition</h1>
           <p className="lead">
-            A stabilised, GitHub-ready pass-and-play quiz build with immutable scoring, Fisher-Yates randomisation, saved games, gear-ready players, and a fixed rarity round.
+            A pass-and-play expedition quiz with species data, working gear, action cards, rarity rounds, and saved progress.
           </p>
           <div className="hero-actions">
             <button onClick={startSetup}>Start new expedition</button>
@@ -108,7 +205,7 @@ export default function App() {
           <div className="stat-grid">
             <span><strong>{BIRD_DATASET.length}</strong> species cards</span>
             <span><strong>{ROUNDS.length}</strong> rounds</span>
-            <span><strong>Gear</strong> model active</span>
+            <span><strong>Gear + Cards</strong> phase 2</span>
           </div>
         </section>
         {guideOpen && <FieldGuide query={guideQuery} setQuery={setGuideQuery} birds={filteredGuide} onClose={() => setGuideOpen(false)} />}
@@ -122,7 +219,7 @@ export default function App() {
         <section className="panel narrow">
           <p className="eyebrow">Expedition roster</p>
           <h1>Choose your players</h1>
-          <p className="muted">Each player now starts with expedition gear and action-card data in state.</p>
+          <p className="muted">Each player starts with working gear and two action cards.</p>
           {names.map((name, index) => (
             <div className="name-row" key={index}>
               <input value={name} onChange={(event) => updateName(index, event.target.value)} aria-label={`Player ${index + 1} name`} />
@@ -192,28 +289,31 @@ export default function App() {
             <button key={choice} onClick={() => answer(choice)}>{choice}</button>
           ))}
         </div>
-        <div className="tool-panel">
-          <h3>Expedition gear</h3>
-          <div className="tool-row">
-            <button className="secondary" onClick={handleUseBinoculars} disabled={!activePlayer || activePlayer.gear.binoculars <= 0 || visibleChoices.length <= 2}>
-              Binoculars ({activePlayer?.gear.binoculars ?? 0})
-            </button>
-            <span>Sonic {activePlayer?.gear.sonic ?? 0}</span>
-            <span>Thermal {activePlayer?.gear.thermal ?? 0}</span>
-            <span>Lures {activePlayer?.gear.lures ?? 0}</span>
-            <span>Shields {activePlayer?.gear.shields ?? 0}</span>
+
+        {activePlayer && (
+          <div className="tool-panel">
+            <h3>Expedition gear</h3>
+            <div className="tool-row">
+              <GearButton label="Binoculars" count={activePlayer.gear.binoculars} onClick={() => handleUseGear("binoculars")} disabled={visibleChoices.length <= 2} />
+              <GearButton label="Sonic" count={activePlayer.gear.sonic} onClick={() => handleUseGear("sonic")} />
+              <GearButton label="Thermal" count={activePlayer.gear.thermal} onClick={() => handleUseGear("thermal")} />
+              <GearButton label="Lure" count={activePlayer.gear.lures} onClick={() => handleUseGear("lures")} />
+              <GearButton label="Shield" count={activePlayer.gear.shields} onClick={() => handleUseGear("shields")} />
+            </div>
+            <h3>Action cards</h3>
+            <div className="card-row">
+              {activePlayer.cardsInHand.length === 0 && <span className="muted">No cards left.</span>}
+              {activePlayer.cardsInHand.map((card, index) => (
+                <button className="action-card" key={`${card.kind}-${index}`} onClick={() => playCard(card, index)}>
+                  <span>{card.icon}</span>
+                  <strong>{card.name}</strong>
+                  <small>{card.description}</small>
+                </button>
+              ))}
+            </div>
           </div>
-          <h3>Action cards</h3>
-          <div className="card-row">
-            {activePlayer?.cardsInHand.map((card, index) => (
-              <article className="action-card" key={`${card.kind}-${index}`}>
-                <span>{card.icon}</span>
-                <strong>{card.name}</strong>
-                <small>{card.description}</small>
-              </article>
-            ))}
-          </div>
-        </div>
+        )}
+
         <div className="tool-row footer-row">
           <span>{round.points} point{round.points === 1 ? "" : "s"} for a correct answer</span>
         </div>
@@ -221,6 +321,15 @@ export default function App() {
       </section>
       {guideOpen && <FieldGuide query={guideQuery} setQuery={setGuideQuery} birds={filteredGuide} onClose={() => setGuideOpen(false)} />}
     </main>
+  );
+}
+
+function GearButton({ label, count, disabled, onClick }: { label: string; count: number; disabled?: boolean; onClick: () => void }) {
+  return (
+    <button className="secondary gear-button" onClick={onClick} disabled={count <= 0 || disabled}>
+      <strong>{label}</strong>
+      <span>{count}</span>
+    </button>
   );
 }
 
@@ -242,14 +351,14 @@ function FieldGuide({ query, setQuery, birds, onClose }: FieldGuideProps) {
           </div>
           <button className="ghost" onClick={onClose}>Close</button>
         </div>
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search species, group, habitat, diet..." />
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search species, scientific name, group, habitat, diet..." />
         <div className="guide-grid">
           {birds.map((bird) => (
             <article className="bird-tile" key={bird.id} style={{ borderColor: bird.color ?? "rgba(255,255,255,0.2)" }}>
               <strong>{bird.name}</strong>
               {bird.scientificName && <em>{bird.scientificName}</em>}
-              <span>{bird.group} · {bird.habitat}</span>
-              <small>{bird.conservation} list · rarity {bird.rarity}/5 · {bird.wingspan}cm wingspan</small>
+              <span>{bird.group} · {bird.habitat} · {bird.diet}</span>
+              <small>{bird.conservation} list · {bird.migratory} · rarity {bird.rarity}/5 · {bird.wingspan}cm wingspan</small>
               <p>{bird.clue}</p>
             </article>
           ))}
